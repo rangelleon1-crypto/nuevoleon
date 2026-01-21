@@ -1,542 +1,117 @@
-const { chromium } = require('playwright');
-const express = require('express');
-const cors = require('cors');
+import time
+import base64
+import requests
+import random
+from fastapi import FastAPI, HTTPException
+from playwright.sync_api import sync_playwright
+import os
 
-const app = express();
-const port = process.env.PORT || 3000;
+app = FastAPI()
 
-app.use(cors());
-app.use(express.json());
+# --- CONFIGURACIÓN ---
+API_KEY_2CAPTCHA = 'a5a8c9ec5df7da6ff61efb8a6780ff60'
+PROXY_HOST = "proxy.smartproxy.net"
+PROXY_PORT = "3120"
+PROXY_USER = "smart-acbga3s2e8o0_area-CA"
+PROXY_PASS = "VGp2kCrlWmUem0b0"
 
-// Configuración de tiempos optimizados (milisegundos)
-const WAIT_TIMES = {
-  short: 300,
-  medium: 800,
-  long: 1100,
-  xlong: 1800,
-  xxlong: 2000
-};
-
-// Configuración del proxy desde variables de entorno
-const PROXY_CONFIG = {
-  server: process.env.PROXY_SERVER || 'http://rko4yuebgb.cn.fxdx.in:17313',
-  username: process.env.PROXY_USERNAME || '1Q2W3E4R5T6B',
-  password: process.env.PROXY_PASSWORD || '1LEREGAZA89re89'
-};
-
-const EMAIL = process.env.EMAIL || 'hdhdhd78@gmail.com';
-
-// Variable para controlar solicitudes simultáneas
-let isProcessing = false;
-let requestQueue = 0;
-
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function runAutomation(placa) {
-  const browser = await chromium.launch({ 
-    headless: true,
-    proxy: PROXY_CONFIG,
-    args: [
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
-      '--disable-setuid-sandbox',
-      '--no-sandbox',
-      '--disable-accelerated-2d-canvas',
-      '--disable-web-security',
-      '--disable-features=site-per-process',
-      `--proxy-server=${PROXY_CONFIG.server}`
-    ]
-  });
-  
-  const context = await browser.newContext({
-    viewport: { width: 1920, height: 1080 },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    proxy: PROXY_CONFIG
-  });
-  
-  const page = await context.newPage();
-  
-  try {
-    console.log(`Conectando con proxy: ${PROXY_CONFIG.server}...`);
-    
-    await page.goto('https://icvnl.gob.mx:1080/estadoctav3/edoctaconsulta#no-back-button', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
-    });
-    await delay(WAIT_TIMES.medium);
-    
-    await page.getByRole('checkbox', { name: 'Acepto bajo protesta de decir' }).check();
-    await delay(WAIT_TIMES.short);
-    
-    await page.getByRole('textbox', { name: 'Placa' }).click();
-    await page.getByRole('textbox', { name: 'Placa' }).fill(placa);
-    await delay(WAIT_TIMES.short);
-    
-    await page.locator('div:nth-child(4)').click();
-    await delay(WAIT_TIMES.long);
-    
-    await page.getByRole('button', { name: 'Consultar' }).click();
-    await delay(WAIT_TIMES.xlong);
-    
-    try {
-      await page.waitForSelector('input[name="robot"], input[type="checkbox"]', { 
-        timeout: 8000
-      });
-      await page.getByRole('checkbox', { name: 'No soy un robot' }).check();
-      await delay(WAIT_TIMES.long);
-    } catch (error) {
-      console.log('No se encontró captcha o ya estaba resuelto');
-    }
-    
-    await page.getByRole('textbox', { name: 'Email' }).click();
-    await page.getByRole('textbox', { name: 'Email' }).fill(EMAIL);
-    await delay(WAIT_TIMES.short);
-    
-    await page.getByRole('button', { name: 'Ver estado de cuenta' }).click();
-    await delay(WAIT_TIMES.xxlong);
-    
-    // Extraer datos limpios
-    const pageContent = await page.textContent('body');
-    const lines = pageContent.split('\n').map(line => line.trim()).filter(line => {
-      const trimmedLine = line.trim();
-      if (!trimmedLine) return false;
-      const exclusionPatterns = [
-        'Selecciona el metodo de pago:',
-        'Tarjeta de Crédito/Débito',
-        'Línea de Referencia Bancaria',
-        'Te redireccionaremos',
-        'Favor de tener habilitados',
-        'Cerrar',
-        'get_ip',
-        'CDATA',
-        '$(\'#modalCargar\')',
-        '//<![CDATA[',
-        '//]]>',
-        'function get_ip'
-      ];
-      return !exclusionPatterns.some(pattern => trimmedLine.includes(pattern));
-    });
-    
-    // Procesar información del vehículo
-    let vehicleInfo = [];
-    let charges = [];
-    let totalAPagar = '';
-    let subtotal = '';
-    
-    // Encontrar información del vehículo
-    const vehicleKeywords = ['Marca:', 'Modelo:', 'Linea:', 'Tipo:', 'Color:', 'NIV:'];
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      
-      // Capturar información del vehículo
-      if (line.includes('Marca:')) {
-        vehicleInfo.push('Marca:');
-        if (i + 1 < lines.length && lines[i + 1].trim() && !lines[i + 1].includes(':')) {
-          vehicleInfo.push(lines[i + 1]);
-        }
-      } else if (line.includes('Modelo:')) {
-        vehicleInfo.push('Modelo:');
-        if (i + 1 < lines.length && lines[i + 1].trim() && !lines[i + 1].includes(':')) {
-          vehicleInfo.push(lines[i + 1]);
-        }
-      } else if (line.includes('Linea:')) {
-        vehicleInfo.push('Linea:');
-        if (i + 1 < lines.length && lines[i + 1].trim() && !lines[i + 1].includes(':')) {
-          vehicleInfo.push(lines[i + 1]);
-        }
-      } else if (line.includes('Tipo:')) {
-        vehicleInfo.push('Tipo:');
-        if (i + 1 < lines.length && lines[i + 1].trim() && !lines[i + 1].includes(':')) {
-          vehicleInfo.push(lines[i + 1]);
-        }
-      } else if (line.includes('Color:')) {
-        vehicleInfo.push('Color:');
-        if (i + 1 < lines.length && lines[i + 1].trim() && !lines[i + 1].includes(':')) {
-          vehicleInfo.push(lines[i + 1]);
-        }
-      } else if (line.includes('NIV:')) {
-        vehicleInfo.push('NIV:');
-        if (i + 1 < lines.length && lines[i + 1].trim() && !lines[i + 1].includes(':')) {
-          vehicleInfo.push(lines[i + 1]);
-        }
-      }
-      
-      // Capturar cargos
-      if (line.match(/\d{4}\s+\$/)) {
-        charges.push(line);
-      }
-      
-      // Capturar subtotal
-      if (line.includes('SUBTOTAL') && !subtotal) {
-        subtotal = line;
-      }
-      
-      // Capturar total a pagar
-      if ((line.includes('TOTAL A PAGAR') || line.match(/TOTAL.*PAGAR/i)) && !totalAPagar) {
-        totalAPagar = line;
-      }
-    }
-    
-    // Si no encontramos total a pagar, buscar patrones alternativos
-    if (!totalAPagar) {
-      for (const line of lines) {
-        if (line.match(/PAGO\s*TOTAL/i) || line.match(/TOTAL.*\$\d/)) {
-          totalAPagar = line;
-          break;
-        }
-      }
-    }
-    
-    // Si aún no hay total, buscar en el contenido completo
-    if (!totalAPagar) {
-      const totalMatch = pageContent.match(/TOTAL\s*A\s*PAGAR[^$\n]*\$?\s*[\d,]+\.?\d*/gi);
-      if (totalMatch && totalMatch.length > 0) {
-        totalAPagar = totalMatch[0].trim();
-      }
-    }
-    
-    return {
-      placa,
-      vehiculo: vehicleInfo.filter(line => line && line.trim()),
-      cargos: charges.length > 0 ? charges : ['No se encontraron cargos'],
-      subtotal: subtotal || 'SUBTOTAL: No disponible',
-      totalAPagar: totalAPagar || 'TOTAL A PAGAR: No disponible'
-    };
-    
-  } catch (error) {
-    console.error('Error durante la automatización:', error.message);
-    throw error;
-  } finally {
-    await browser.close();
-  }
+proxies_dict = {
+    "http": f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}",
+    "https": f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}",
 }
 
-// Middleware para verificar solicitudes simultáneas
-function checkSimultaneousRequests(req, res, next) {
-  requestQueue++;
-  console.log(`📊 Solicitudes en cola: ${requestQueue}`);
-  
-  if (isProcessing) {
-    requestQueue--;
-    console.log(`❌ Solicitud rechazada - Ya hay una consulta en proceso`);
-    return res.status(429).json({
-      error: 'sin respuesta',
-      mensaje: 'El sistema está procesando otra consulta. Intente nuevamente en unos momentos.',
-      estado: 'ocupado'
-    });
-  }
-  
-  isProcessing = true;
-  console.log(`✅ Solicitud aceptada - Iniciando proceso`);
-  
-  next();
-}
+def human_delay(min_ms=1000, max_ms=3000):
+    time.sleep(random.uniform(min_ms, max_ms) / 1000)
 
-// Endpoints de la API
-app.get('/', (req, res) => {
-  res.json({
-    message: 'API de consulta de estado de cuenta vehicular',
-    status: 'online',
-    proxy: 'activado',
-    solicitudes_simultaneas: '1 máximo',
-    estado_actual: isProcessing ? 'procesando' : 'disponible',
-    cola: requestQueue,
-    endpoints: {
-      consulta: 'GET /consulta?placa=ABC123',
-      consultaPost: 'POST /consulta con JSON body { "placa": "ABC123" }',
-      health: 'GET /health',
-      consola: 'GET /consulta-consola/:placa'
-    },
-    ejemplo: {
-      url: '/consulta?placa=ABC123',
-      respuesta: {
-        placa: "ABC123",
-        vehiculo: ["Marca:", "TOYOTA", "Modelo:", "2025", "Linea:", "SIENNA HÍBRIDO", "Tipo:", "XLE, MINI VAN, SISTE", "Color:", "GRIS", "NIV:", "************45180"],
-        cargos: ["No se encontraron cargos"],
-        subtotal: "SUBTOTAL MONTO SUBSIDIO: -$198.00",
-        totalAPagar: "TOTAL A PAGAR: $3,802.00"
-      }
-    }
-  });
-});
+def human_type(element, text):
+    for char in text:
+        element.type(char, delay=random.uniform(70, 150))
 
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    proxy: 'configurado',
-    procesando: isProcessing,
-    cola: requestQueue,
-    service: 'consulta-vehicular-api'
-  });
-});
+def solve_captcha_api(image_buffer):
+    try:
+        image_b64 = base64.b64encode(image_buffer).decode('utf-8')
+        payload = {'key': API_KEY_2CAPTCHA, 'method': 'base64', 'body': image_b64, 'json': 1}
+        response = requests.post("http://2captcha.com/in.php", data=payload, proxies=proxies_dict, timeout=30).json()
+        if response.get("status") != 1: return None
+        request_id = response.get("request")
+        for _ in range(30):
+            time.sleep(5)
+            result = requests.get(f"http://2captcha.com/res.php?key={API_KEY_2CAPTCHA}&action=get&id={request_id}&json=1", proxies=proxies_dict).json()
+            if result.get("status") == 1: return result.get("request")
+    except: return None
+    return None
 
-app.get('/consulta', checkSimultaneousRequests, async (req, res) => {
-  try {
-    const { placa } = req.query;
-    
-    if (!placa) {
-      isProcessing = false;
-      requestQueue--;
-      return res.status(400).json({
-        error: 'Placa requerida. Ejemplo: /consulta?placa=ABC123'
-      });
-    }
-    
-    const placaLimpia = placa.trim().toUpperCase().replace(/\s+/g, '');
-    
-    if (!placaLimpia) {
-      isProcessing = false;
-      requestQueue--;
-      return res.status(400).json({
-        error: 'Placa requerida'
-      });
-    }
-    
-    const startTime = Date.now();
-    console.log(`\nIniciando consulta para placa: ${placaLimpia}`);
-    console.log(`Usando proxy: ${PROXY_CONFIG.server}`);
-    
-    const resultados = await runAutomation(placaLimpia);
-    const tiempo = ((Date.now() - startTime) / 1000).toFixed(2);
-    
-    const respuesta = {
-      ...resultados,
-      tiempoConsulta: `${tiempo} segundos`,
-      consultadoEn: new Date().toISOString()
-    };
-    
-    console.log(`Consulta completada en ${tiempo} segundos`);
-    
-    res.json(respuesta);
-    
-  } catch (error) {
-    console.error('Error en la consulta:', error);
-    res.status(500).json({
-      error: 'Error en la consulta',
-      message: error.message,
-      detalles: 'Verifique: 1. Conexión a internet, 2. Proxy disponible, 3. Placa correcta'
-    });
-  } finally {
-    isProcessing = false;
-    requestQueue--;
-    console.log(`🔄 Sistema liberado. Estado: disponible`);
-  }
-});
+def scrape_placa(placa_id: str):
+    with sync_playwright() as p:
+        # Railway requiere '--no-sandbox' para correr en contenedores
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            proxy={"server": f"http://{PROXY_HOST}:{PROXY_PORT}", "username": PROXY_USER, "password": PROXY_PASS}
+        )
+        page = context.new_page()
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
-app.post('/consulta', checkSimultaneousRequests, async (req, res) => {
-  try {
-    const { placa } = req.body;
-    
-    if (!placa) {
-      isProcessing = false;
-      requestQueue--;
-      return res.status(400).json({
-        error: 'Placa requerida en el body. Ejemplo: { "placa": "ABC123" }'
-      });
-    }
-    
-    const placaLimpia = placa.trim().toUpperCase().replace(/\s+/g, '');
-    
-    if (!placaLimpia) {
-      isProcessing = false;
-      requestQueue--;
-      return res.status(400).json({
-        error: 'Placa requerida'
-      });
-    }
-    
-    const startTime = Date.now();
-    console.log(`\nIniciando consulta para placa: ${placaLimpia}`);
-    console.log(`Usando proxy: ${PROXY_CONFIG.server}`);
-    
-    const resultados = await runAutomation(placaLimpia);
-    const tiempo = ((Date.now() - startTime) / 1000).toFixed(2);
-    
-    const respuesta = {
-      ...resultados,
-      tiempoConsulta: `${tiempo} segundos`,
-      consultadoEn: new Date().toISOString()
-    };
-    
-    console.log(`Consulta completada en ${tiempo} segundos`);
-    
-    res.json(respuesta);
-    
-  } catch (error) {
-    console.error('Error en la consulta:', error);
-    res.status(500).json({
-      error: 'Error en la consulta',
-      message: error.message,
-      detalles: 'Verifique: 1. Conexión a internet, 2. Proxy disponible, 3. Placa correcta'
-    });
-  } finally {
-    isProcessing = false;
-    requestQueue--;
-    console.log(`🔄 Sistema liberado. Estado: disponible`);
-  }
-});
+        try:
+            page.goto('https://www.icvnl.gob.mx/EstadodeCuenta', wait_until='networkidle')
+            frame = page.frame_locator('iframe[name="estadodecuenta"]')
+            frame.locator('body').wait_for(state="visible")
+            
+            # --- PARTE 1 ---
+            frame.get_by_role('checkbox', name='Acepto bajo protesta de decir').click()
+            input_placa = frame.get_by_role('textbox', name='Placa')
+            human_type(input_placa, placa_id)
+            
+            frame.get_by_role('checkbox', name='No soy un robot').click(force=True)
+            img_1 = frame.get_by_role('img', name='Retype the CAPTCHA code from')
+            img_1.wait_for(state="visible", timeout=12000)
+            
+            res1 = solve_captcha_api(img_1.screenshot())
+            if not res1: return {"error": "Captcha 1 falló"}
+            
+            human_type(frame.locator('#txt'), res1)
+            frame.get_by_role('button', name='Consultar').click()
 
-// Endpoint para formato de consola (similar al script original)
-app.get('/consulta-consola/:placa', checkSimultaneousRequests, async (req, res) => {
-  try {
-    const { placa } = req.params;
-    
-    if (!placa) {
-      isProcessing = false;
-      requestQueue--;
-      return res.status(400).send('Error: Placa requerida\n');
-    }
-    
-    const placaLimpia = placa.trim().toUpperCase().replace(/\s+/g, '');
-    const startTime = Date.now();
-    
-    console.log(`\nIniciando consulta para placa: ${placaLimpia}`);
-    console.log(`Usando proxy: ${PROXY_CONFIG.server}`);
-    
-    const resultados = await runAutomation(placaLimpia);
-    const tiempo = ((Date.now() - startTime) / 1000).toFixed(2);
-    
-    // Formatear respuesta como en la consola
-    let respuesta = '';
-    respuesta += '\n' + '='.repeat(50) + '\n';
-    respuesta += `RESULTADOS PARA PLACA: ${resultados.placa}\n`;
-    respuesta += '='.repeat(50) + '\n';
-    
-    respuesta += '\nINFORMACION DEL VEHICULO:\n';
-    respuesta += '-'.repeat(30) + '\n';
-    
-    // Formatear la información del vehículo
-    let currentKey = '';
-    for (let i = 0; i < resultados.vehiculo.length; i++) {
-      const item = resultados.vehiculo[i];
-      if (item.endsWith(':')) {
-        currentKey = item;
-        respuesta += currentKey + '\n';
-      } else if (currentKey && i > 0 && resultados.vehiculo[i - 1].endsWith(':')) {
-        respuesta += item + '\n';
-      } else {
-        respuesta += item + '\n';
-      }
-    }
-    
-    respuesta += '\nCARGOS:\n';
-    respuesta += '-'.repeat(30) + '\n';
-    if (resultados.cargos && resultados.cargos.length > 0) {
-      if (resultados.cargos[0] === 'No se encontraron cargos') {
-        respuesta += 'No se encontraron cargos\n';
-      } else {
-        resultados.cargos.forEach((cargo, index) => {
-          respuesta += `${index + 1}. ${cargo}\n`;
-        });
-      }
-    } else {
-      respuesta += 'No se encontraron cargos\n';
-    }
-    
-    respuesta += '\nRESUMEN:\n';
-    respuesta += '-'.repeat(30) + '\n';
-    respuesta += `SUBTOTAL: ${resultados.subtotal}\n`;
-    respuesta += `TOTAL A PAGAR: ${resultados.totalAPagar}\n`;
-    respuesta += `\nTiempo de consulta: ${tiempo} segundos\n`;
-    
-    res.set('Content-Type', 'text/plain');
-    res.send(respuesta);
-    
-  } catch (error) {
-    console.error('Error en la consulta:', error);
-    res.status(500).send(`Error en la consulta. Verifique:\n1. Conexión a internet\n2. Proxy disponible\n3. Placa correcta\nDetalle del error: ${error.message}\n`);
-  } finally {
-    isProcessing = false;
-    requestQueue--;
-    console.log(`🔄 Sistema liberado. Estado: disponible`);
-  }
-});
+            # --- PARTE 2 ---
+            page.wait_for_load_state("networkidle")
+            frame.get_by_role("textbox", name="Email").wait_for(state="visible", timeout=15000)
+            
+            cb_robot_2 = frame.get_by_role('checkbox', name='No soy un robot')
+            cb_robot_2.click(force=True)
 
-// Endpoint para formato HTML
-app.get('/consulta-html/:placa', checkSimultaneousRequests, async (req, res) => {
-  try {
-    const { placa } = req.params;
-    
-    if (!placa) {
-      isProcessing = false;
-      requestQueue--;
-      return res.status(400).send('<h1>Error: Placa requerida</h1>');
-    }
-    
-    const placaLimpia = placa.trim().toUpperCase().replace(/\s+/g, '');
-    const resultados = await runAutomation(placaLimpia);
-    
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Consulta Vehicular - ${resultados.placa}</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          .header { background: #f0f0f0; padding: 15px; border-radius: 5px; }
-          .section { margin: 20px 0; }
-          .title { font-weight: bold; color: #333; }
-          .content { background: #f9f9f9; padding: 15px; border-radius: 5px; }
-          .cargo { margin: 5px 0; }
-          .total { font-weight: bold; color: #d9534f; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1>Resultados para placa: ${resultados.placa}</h1>
-          <p>Consultado el: ${new Date().toLocaleString()}</p>
-        </div>
-        
-        <div class="section">
-          <h2 class="title">Información del Vehículo</h2>
-          <div class="content">
-            ${resultados.vehiculo.map(item => `<p>${item}</p>`).join('')}
-          </div>
-        </div>
-        
-        <div class="section">
-          <h2 class="title">Cargos</h2>
-          <div class="content">
-            ${resultados.cargos.map((cargo, index) => `<div class="cargo">${index + 1}. ${cargo}</div>`).join('')}
-          </div>
-        </div>
-        
-        <div class="section">
-          <h2 class="title">Resumen</h2>
-          <div class="content">
-            <p><strong>${resultados.subtotal}</strong></p>
-            <p class="total">${resultados.totalAPagar}</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-    
-    res.set('Content-Type', 'text/html');
-    res.send(html);
-    
-  } catch (error) {
-    res.status(500).send('<h1>Error en la consulta</h1><p>Verifique la placa e intente nuevamente.</p>');
-  } finally {
-    isProcessing = false;
-    requestQueue--;
-  }
-});
+            img_2 = frame.get_by_role('img', name='Retype the CAPTCHA code from')
+            img_2.wait_for(state="visible", timeout=10000)
+            
+            res2 = solve_captcha_api(img_2.screenshot())
+            if not res2: return {"error": "Captcha 2 falló"}
+            
+            input_res2 = frame.locator('input[name="txt2"]')
+            human_type(input_res2, res2)
 
-app.listen(port, () => {
-  console.log(`🚀 API de consulta vehicular iniciada`);
-  console.log(`📡 Puerto: ${port}`);
-  console.log(`🌐 Proxy: ${PROXY_CONFIG.server}`);
-  console.log(`📧 Email: ${EMAIL}`);
-  console.log(`🚫 Solicitudes simultáneas: 1 máximo`);
-  console.log(`✅ Endpoints disponibles:`);
-  console.log(`   GET  /consulta?placa=ABC123`);
-  console.log(`   POST /consulta`);
-  console.log(`   GET  /consulta-consola/ABC123`);
-  console.log(`   GET  /consulta-html/ABC123`);
-  console.log(`   GET  /health`);
-  console.log(`   GET  /`);
-}); 
+            input_email = frame.get_by_role('textbox', name='Email')
+            human_type(input_email, 'consultas_api@gmail.com')
+
+            btn_final = frame.locator('input[type="submit"][value*="estado"], button:has-text("Ver estado de cuenta")').first
+            btn_final.click()
+            
+            time.sleep(5) 
+            resultado = frame.locator("body").inner_text()
+            
+            return {"placa": placa_id, "datos": resultado}
+
+        except Exception as e:
+            return {"error": str(e)}
+        finally:
+            browser.close()
+
+@app.get("/consultar/{placa}")
+async def api_consultar(placa: str):
+    data = scrape_placa(placa)
+    if "error" in data:
+        raise HTTPException(status_code=500, detail=data["error"])
+    return data
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
